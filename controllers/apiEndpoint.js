@@ -1,0 +1,9 @@
+exports.defaultPrefix = "comdex";
+exports.command = "comdex";
+exports.nodePort = "26657"
+exports.restEndpoint = `http://127.0.0.1:26657`;
+exports.lcdEndpoint = "http://127.0.0.1:1311";
+exports.localEndpoint = `http://127.0.0.1:2200`;
+exports.apiEndpoint = "127.0.0.1";
+exports.directory = "/ibc";
+exports.firstBlock = 1;
