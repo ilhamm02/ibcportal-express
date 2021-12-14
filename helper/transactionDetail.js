@@ -22,6 +22,7 @@ module.exports = {
       var txGasWanted = result.gas_wanted;
       var txGasUsed = result.gas_used;
       var txFee = 0;
+      var txFeeDenom = "";
       var txAdditional = [];
       var txMessage = []
       try{
@@ -38,15 +39,12 @@ module.exports = {
               (ress.attributes).forEach(resss => {
                 if(resss.key === "action"){
                   txType = resss.value;
-                  if(txType.indexOf(".") > 0){
+                  if(txType.includes(".")){
                     txType = txType.split(".");
                     txType = txType[txType.length - 1];
                     txType = txType.split("Msg")[1];
                     txType = txType.replace(/([A-Z])/g, ' $1').trim();
                     txType = txType.toLowerCase();
-                  }else if(txType.indexOf("_") > 0){
-                    txTypeCheck = txType.split("_");
-                    txType.push(txType.join(" "));
                   }
                 }
               })
@@ -103,12 +101,20 @@ module.exports = {
           if(ress.amount) {
             txFee += parseInt(ress.amount);
           }
+          if(ress.denom) {
+            txFeeDenom += ress.denom;
+            if(txFeeDenom.length > 5 && txFeeDenom.includes("base")){
+              txFeeDenom = txFeeDenom.split("base")[1].toUpperCase();
+            }else if(txFeeDenom[0] === "u" || txFeeDenom[0] === "a" || txFeeDenom[0] === "t"){
+              txFeeDenom = txFeeDenom.substring(1);
+            }
+          }
         })
       }
       if(Array.isArray(txType)) {
         txType = txType[0];
       }
-      if(txType === "transfer" || txType === "MsgTransfer"){
+      if(txType === "transfer" || txType === "MsgTransfer" || txType === "recv_packet" || txType === "recv packet" || txType === "MsgRecvPacket" || txType === "acknowledgement" || txType === "MsgAcknowledgement" || txType === "acknowledge_packet"){
         var from;
         var to;
         var fromChannel;
@@ -119,11 +125,29 @@ module.exports = {
         var amount = txAmount;
         var height;
         var denom;
-        if(txType === "transfer"){
+        var sequence;
+        if(txType === "transfer" || txType === "recv_packet" || txType === "acknowledgement" || txType === "acknowledge_packet" || txType === "recv packet"){
           (result.logs).forEach(result => {
             (result.events).forEach(ress => {
-              if(ress.type === "send_packet"){
+              if(ress.type === "send_packet" || ress.type === "acknowledge_packet" || ress.type === "recv_packet"){
                 (ress.attributes).forEach(resss => {
+                  if(resss.key === "packet_data"){
+                    from = resss.value;
+                    from = JSON.parse(from.replace("/",""))
+                    amount = from.amount;
+                    denom = from.denom;
+                    if(denom.includes("/")){
+                      denom = denom.split("/")
+                      denom = denom[denom.length-1];
+                    }
+                    if(denom.length > 5 && denom.includes("base")){
+                      denom = denom.split("base")[1].toUpperCase();
+                    }else if(denom[0] === "u" || denom[0] === "a" || denom[0] === "t"){
+                      denom = denom.substring(1);
+                    }
+                    to = from.receiver;
+                    from = from.sender;
+                  }
                   if(resss.key === "packet_src_channel"){
                     fromChannel = resss.value;
                   }
@@ -138,6 +162,12 @@ module.exports = {
                   }
                   if(resss.key === "packet_connection"){
                     connection = resss.value;
+                  }
+                  if(resss.key === "packet_sequence"){
+                    sequence = resss.value;
+                  }
+                  if(resss.key === "packet_timeout_height"){
+                    height = resss.value.split("-")[1];
                   }
                 })
               }
@@ -158,51 +188,46 @@ module.exports = {
                   }
                 })
               }
-              if(ress.type === "ibc_transfer"){
-                (ress.attributes).forEach(resss => {
-                  if(resss.key === "sender"){
-                    from = resss.value;
-                  }
-                  if(resss.key === "receiver"){
-                    to = resss.value;
-                  }
-                })
-              }
             })
           })
         }
-        (result.tx.body.messages).forEach(res => {
-          fromChannel = res.source_channel
-          fromPort = res.source_port
-          amount = res.token.amount
-          height = res.timeout_height.revision_height
-          if(res.token && !denom){
-            if(res.token.denom){
-              denom = res.token.denom
-              if(!denom.includes("ibc/")){
-                denom = denom.split("/")
-                denom = denom[denom.length - 1];
-                if(denom[0] === "u"){
-                  denom = (denom.substring(1)).toUpperCase()
-                }else if(denom.substring(0,4) === "base"){
-                  denom = (denom.substring(4)).toUpperCase()
+        if(txType === "transfer"){
+          (result.tx.body.messages).forEach(res => {
+            fromChannel = res.source_channel
+            fromPort = res.source_port
+            amount = res.token.amount
+            height = res.timeout_height.revision_height
+            if(res.token && !denom){
+              if(res.token.denom){
+                denom = res.token.denom
+                if(!denom.includes("ibc/")){
+                  denom = denom.split("/")
+                  denom = denom[denom.length - 1];
+                  denom = denom[0]
+                  if(denom.length > 5 && denom.includes("base")){
+                    denom = denom.split("base")[1].toUpperCase();
+                  }else if(denom[0] === "u" || denom[0] === "a" || denom[0] === "t"){
+                    denom = denom.substring(1);
+                  }
                 }
               }
             }
-          }
-        })
-        if(denom.includes("ibc/")){
-          var denomHash = denom.split("ibc/")[1]
-          var getDenom = await Axios.get(`${rpc}/ibc/applications/transfer/v1beta1/denom_traces/${denomHash}`)
-          if(getDenom.data){
-            denom = getDenom.data.denom_trace.base_denom;
-            denom = denom.split("/")
-            denom = denom[denom.length - 1];
-            denom = denom.split("u")
-            if(denom[0] === "u"){
-              denom = (denom.substring(1)).toUpperCase()
-            }else if(denom.substring(0,4) === "base"){
-              denom = (denom.substring(4)).toUpperCase()
+          })
+        }
+        if(denom){
+          if(denom.includes("ibc/")){
+            var denomHash = denom.split("ibc/")[1]
+            var getDenom = await Axios.get(`${rpc}/ibc/applications/transfer/v1beta1/denom_traces/${denomHash}`)
+            if(getDenom.data){
+              denom = getDenom.data.denom_trace.base_denom;
+              denom = denom.split("/")
+              denom = denom[denom.length - 1];
+              denom = denom.split("u")
+              if(denom[0] === "u"){
+                denom = (denom.substring(1)).toUpperCase()
+              }else if(denom.substring(0,4) === "base"){
+                denom = (denom.substring(4)).toUpperCase()
+              }
             }
           }
         }
@@ -217,7 +242,8 @@ module.exports = {
           toPort,
           amount,
           connection,
-          height
+          height,
+          sequence
         }
       }
 
@@ -233,6 +259,7 @@ module.exports = {
         txGasWanted,
         txGasUsed,
         txFee,
+        txFeeDenom,
         txMemo: result.tx.body.memo,
         txAdditional,
         txMessage

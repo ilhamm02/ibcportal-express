@@ -4,7 +4,12 @@ const {getTxList} = require('../helper/transactionDetail');
 module.exports = {
   channel: async(req, res) => {
     if(req.query.rpc){
-      let getDetail = await Axios.get(`http://${req.query.rpc}/ibc/core/channel/v1beta1/channels?pagination.limit=5000`)
+      var getDetail;
+      try{
+        getDetail = await Axios.get(`http://${req.query.rpc}/ibc/core/channel/v1beta1/channels?pagination.limit=5000`)
+      }catch(e) {
+        getDetail = await Axios.get(`http://${req.query.rpc}/ibc/core/channel/v1/channels?pagination.limit=5000`)
+      }
       const channels = (getDetail.data.channels).map(ch => {
         return{
           status: ch.state,
@@ -27,7 +32,12 @@ module.exports = {
   },
   tokenList: async(req, res) => {
     if(req.query.rpc){
-      const getDetail = await Axios.get(`http://${req.query.rpc}/ibc/applications/transfer/v1beta1/denom_traces`)
+      var getDetail;
+      try{
+        getDetail = await Axios.get(`http://${req.query.rpc}/ibc/applications/transfer/v1beta1/denom_traces`)
+      }catch(e) {
+        getDetail = await Axios.get(`http://${req.query.rpc}/ibc/apps/transfer/v1/denom_traces`)
+      }
       const tokens = (getDetail.data.denom_traces).map(token => {
         var denom = token.base_denom;
         if(denom.length > 5 && denom.includes("base")){

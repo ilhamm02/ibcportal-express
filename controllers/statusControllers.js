@@ -3,7 +3,7 @@ const Axios = require('axios');
 module.exports={
   status: async(req, res) => {
     if(req.query.rpc){
-      var totalTx = await Axios.get(`http://${req.query.rpc}/cosmos/tx/v1beta1/txs?events=message.module=%27transfer%27&pagination.limit=1&pagination.offset=0`);
+      var totalTx = await Axios.get(`http://${req.query.rpc}/cosmos/tx/v1beta1/txs?events=message.module=%27ibc_channel%27&pagination.limit=1&pagination.offset=0`);
       totalTx = parseInt(totalTx.data.pagination.total);
       var denom = await Axios.get(`http://${req.query.rpc}/cosmos/bank/v1beta1/supply`);
       denom = denom.data.supply[denom.data.supply.length - 1].denom;
@@ -15,9 +15,19 @@ module.exports={
       var block = await Axios.get(`http://${req.query.rpc}/cosmos/base/tendermint/v1beta1/blocks/latest`);
       const chainId = block.data.block.header.chain_id;
       block = block.data.block.header.height;
-      var channel = await Axios.get(`http://${req.query.rpc}/ibc/core/channel/v1beta1/channels`);
+      var channel;
+      try{
+        channel = await Axios.get(`http://${req.query.rpc}/ibc/core/channel/v1beta1/channels`);
+      }catch(e){
+        channel = await Axios.get(`http://${req.query.rpc}/ibc/core/channel/v1/channels`);
+      }
       channel = channel.data.pagination.total;
-      var tokens = await Axios.get(`http://${req.query.rpc}/ibc/applications/transfer/v1beta1/denom_traces`)
+      var tokens;
+      try{
+        tokens = await Axios.get(`http://${req.query.rpc}/ibc/applications/transfer/v1beta1/denom_traces`)
+      }catch(e) {
+        tokens = await Axios.get(`http://${req.query.rpc}/ibc/apps/transfer/v1/denom_traces`)
+      }
       tokens = tokens.data.pagination.total;
       return res.send({
         result: true,
